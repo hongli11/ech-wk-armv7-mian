@@ -36,7 +36,7 @@ FROM alpine:3.18
 
 # 添加应用元数据
 LABEL maintainer="your-name" \
-      description="ech-workers for ARMv7" \
+      description="ech-workers for ARMv7 and AMD64" \
       org.opencontainers.image.source="https://github.com/hongli11/ech-wk-armv7-mian"
 
 # 创建非root用户（安全优化）
