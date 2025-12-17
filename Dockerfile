@@ -1,44 +1,66 @@
-# 阶段一：构建环境 (使用 Go 编译源码)
-FROM golang:alpine AS builder
+# ==================== 第一阶段：构建 ====================
+FROM --platform=$BUILDPLATFORM golang:1.21-alpine AS builder
+
+# 安装必要的构建工具
+RUN apk add --no-cache git
 
 # 设置工作目录
 WORKDIR /app
 
-# 安装 git
-RUN apk add --no-cache git
+# 配置 Go 环境变量和缓存
+ARG TARGETARCH
+ARG TARGETVARIANT
+ENV CGO_ENABLED=0 \
+    GOPROXY=https://goproxy.cn,direct \
+    GO111MODULE=on
 
-# 拉取源码
-# 如果你在国内网络环境构建失败，可能需要配置 GOPROXY，下面这行被注释的是备用：
-ENV GOPROXY=https://goproxy.cn,direct
-RUN git clone https://github.com/byJoey/ech-wk.git .
+# 先复制依赖文件，利用缓存层
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# 初始化依赖
-RUN go mod init ech-wk 2>/dev/null || true
-RUN go mod tidy
+# 复制源码
+COPY . .
 
-# 核心步骤：交叉编译设置
-# 强制告诉编译器我们要生成的是 linux/arm/v7 (玩客云架构) 的程序
-ENV CGO_ENABLED=0
-ENV GOOS=linux
-ENV GOARCH=arm
-ENV GOARM=7
+# 根据目标架构设置编译环境并编译
+RUN if [ "$TARGETARCH" = "arm" ] && [ "$TARGETVARIANT" = "v7" ]; then \
+        export GOARCH=arm GOARM=7; \
+    else \
+        export GOARCH=$TARGETARCH; \
+    fi; \
+    export GOOS=linux && \
+    go build -ldflags="-s -w -extldflags '-static'" -trimpath -o ech-workers .
 
-# 编译
-RUN go build -ldflags="-s -w" -o ech-workers ech-workers.go
+# ==================== 第二阶段：运行 ====================
+FROM arm32v7/alpine:3.18
 
-# 阶段二：最终镜像 (Alpine)
-FROM alpine:latest
+# 添加应用元数据
+LABEL maintainer="your-name" \
+      description="ech-workers for ARMv7" \
+      org.opencontainers.image.source="https://github.com/hongli11/ech-wk-armv7-mian"
 
+# 创建非root用户（安全优化）
+RUN addgroup -g 1001 -S appuser && \
+    adduser -u 1001 -S appuser -G appuser
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN apk add --no-cache tzdata ca-certificates && \
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# 设置工作目录
 WORKDIR /app
-RUN apk add --no-cache ca-certificates tzdata
 
-# 从第一阶段复制编译好的文件
-COPY --from=builder /app/ech-workers .
+# 从构建阶段复制二进制文件，并设置正确的权限
+COPY --from=builder --chown=appuser:appuser /app/ech-workers .
 
-# 赋予执行权限
-RUN chmod +x ech-workers
+# 切换到非root用户运行
+USER appuser
 
-# 端口和启动命令
+# 暴露端口
 EXPOSE 30000
+
+# 启动命令
 ENTRYPOINT ["./ech-workers"]
 CMD ["-l", "0.0.0.0:30000"]
