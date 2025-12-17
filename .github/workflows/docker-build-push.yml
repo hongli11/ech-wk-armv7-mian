@@ -33,7 +33,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ secrets.DOCKERHUB_USERNAME }}/ech-workers # 你的镜像名称
+        images: ${{ renhongli123 }}/ech-workers # 你的镜像名称
         tags: |
           type=ref,event=branch
           type=ref,event=pr
