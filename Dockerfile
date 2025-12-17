@@ -32,7 +32,7 @@ RUN if [ "$TARGETARCH" = "arm" ] && [ "$TARGETVARIANT" = "v7" ]; then \
     go build -ldflags="-s -w -extldflags '-static'" -trimpath -o ech-workers .
 
 # ==================== 第二阶段：运行 ====================
-FROM arm32v7/alpine:3.18
+FROM alpine:3.18
 
 # 添加应用元数据
 LABEL maintainer="your-name" \
